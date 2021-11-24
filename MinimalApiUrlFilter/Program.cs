@@ -2,7 +2,6 @@ using Microsoft.Extensions.Caching.Redis;
 using MinimalApiUrlFilter.Cache;
 using MinimalApiUrlFilter.Const;
 using MinimalApiUrlFilter.Domain;
-using MinimalApiUrlFilter.Register;
 using MinimalApiUrlFilter.Service;
 using System.Net;
 
