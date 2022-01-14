@@ -21,8 +21,8 @@
 | /UrlCheck | ../UrlCheck?queryUrlFilter="url" | GET
 | /AddNewUrl | ../AddNewUrl | POST
 | /DeleteUrl | ../DeleteUrl?queryUrlFilter="url" | POST
-| /UpdateUrl | ../UpdateUrl (Next Features 🖖) | PUT
-| /ListAllBlockedUrls | ../ListAllBlockedUrls (Next Features 🖖) | GET
+| /UpdateUrl | ../UpdateUrl | PUT
+| /ListAllBlockedUrls | ../ListAllBlockedUrls | GET
 
 ## Http Status Codes
 
