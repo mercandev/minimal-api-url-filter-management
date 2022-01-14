@@ -36,8 +36,10 @@ namespace MinimalApiUrlFilter.Service
                string.Join("", separateUrl?.Skip(1)?.Take(2)?.ToArray()), "*");
 
             var fullKey = string.Join("", domainKey?.Replace("*", string.Empty),
-                separateUrl?.Skip(3)?.Take(10)?.LastOrDefault()?.Replace("-", string.Empty));
+                separateUrl?.Skip(3)?.Take(20)?.LastOrDefault()?.Replace("-", string.Empty));
 
+            fullKey = fullKey.EndsWith("-") ? fullKey = domainKey : fullKey;
+            
             return Tuple.Create(domainKey, fullKey);
         }
 

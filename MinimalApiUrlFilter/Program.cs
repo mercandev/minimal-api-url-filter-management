@@ -4,11 +4,16 @@ using MinimalApiUrlFilter.Const;
 using MinimalApiUrlFilter.Domain;
 using MinimalApiUrlFilter.Service;
 using System.Net;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+var connectionString = builder.Configuration.GetConnectionString("ConnectionString");
+builder.Services.AddDbContext<UrlFilterContext>(x => x.UseNpgsql(connectionString));
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 RedisCacheOptions options = new();
 var section = builder.Configuration.GetSection("Redis");
@@ -59,9 +64,9 @@ app.MapGet("/UrlCheck", (string queryUrlFilter, IUrlFilterService urlFilterServi
     return result == null ? http.Response.StatusCode = (int)HttpStatusCode.Accepted : http.Response.StatusCode = (int)HttpStatusCode.NotAcceptable;
 });
 
-app.MapPost("/AddNewUrl", (UrlFilterContentModel contentModel, IUrlFilterService urlFilterService, HttpContext http) =>
+app.MapPost("/AddNewUrl", (UrlFilterContext context, UrlFilterContentModel? contentModel, IUrlFilterService urlFilterService, HttpContext http) =>
 {
-    if (contentModel is null || contentModel == default)
+    if (contentModel is null)
     {
         throw new Exception(ErrorConst.CONTENT_MODEL_NOT_VALID);
     }
@@ -86,10 +91,32 @@ app.MapPost("/AddNewUrl", (UrlFilterContentModel contentModel, IUrlFilterService
 
     urlFilterService.SetUrlRedis(keyHash, urlFilterContent, TimeSpan.FromDays(1));
 
+
+    var dublicateControl = context.UrlFilter.Where(x => x.UrlKey == keyHash);
+
+    if (dublicateControl.Any())
+    {
+        throw new Exception("url already exist!");
+    }
+    
+    var addDbFilter = new UrlFilter()
+    {
+        UrlKey = keyHash,
+        UrlContent = contentModel.Url,
+        NonSecureAccess = contentModel.NonSecureAccess,
+        SecureAccess = contentModel.SecureAccess,
+        AllPortsBlocked = contentModel.AllPortsBlocked,
+        DomainBlocked = contentModel.DomainBlocked,
+        CreatedBy = "App"
+    };
+
+    context.UrlFilter.Add(addDbFilter);
+    context.SaveChanges();
+
     return http.Response.StatusCode = (int)HttpStatusCode.Created;
 });
 
-app.MapDelete("/DeleteUrl", (string queryUrlFilter, IUrlFilterService urlFilterService, HttpContext http) =>
+app.MapDelete("/DeleteUrl", (UrlFilterContext context, string queryUrlFilter, IUrlFilterService urlFilterService, HttpContext http) =>
 {
     if (string.IsNullOrWhiteSpace(queryUrlFilter))
     {
@@ -105,28 +132,76 @@ app.MapDelete("/DeleteUrl", (string queryUrlFilter, IUrlFilterService urlFilterS
 
     var deleteKey = (string.IsNullOrWhiteSpace(key.Item2) ? key.Item1 : key.Item2);
 
-    var isUrlSet = urlFilterService.IsSet(deleteKey);
+    var deleteUrl = context.UrlFilter.Where(x => x.UrlKey == deleteKey).FirstOrDefault();
 
-    if (!isUrlSet)
+    if (deleteUrl is null) 
     {
-        return http.Response.StatusCode = (int)HttpStatusCode.NotFound; 
+        throw new Exception("url not exist!");
     }
 
+    deleteUrl.IsActive = false;
     urlFilterService.RemoveUrlRedis(deleteKey);
-
+    
+    context.UrlFilter.Update(deleteUrl);
+    context.SaveChanges();
+    
     return http.Response.StatusCode = (int)HttpStatusCode.OK;
 });
 
 
-app.MapPut("/UpdateUrl", (UrlFilterContentModel contentModel, IUrlFilterService urlFilterService, HttpContext http) =>
+app.MapPut("/UpdateUrl", (UrlFilterContext context, UrlFilterContentModel? contentModel, IUrlFilterService urlFilterService, HttpContext http) =>
 {
+
+    if (contentModel is null)
+    {
+        throw new Exception(ErrorConst.CONTENT_MODEL_NOT_VALID);
+    }
+    
+    if (!urlFilterService.IsUrlValid(contentModel.Url))
+    {
+        throw new Exception(ErrorConst.URL_ADDRESS_NOT_VALID);
+    }
+
+    var checkUrl = context.UrlFilter.Where(x => x.UrlContent == contentModel.Url).FirstOrDefault();
+
+    if (checkUrl is null)
+    {
+        throw new Exception("url not exist!");
+    }
+    
+    var key = urlFilterService.UrlKey(contentModel.Url);
+    
+    var keyHash = contentModel.DomainBlocked.Equals(true) ? key.Item1 : key.Item2;
+
+    var updateModel = new UrlFilterContentModel()
+    {
+        Url = contentModel.Url,
+        DomainBlocked = contentModel.DomainBlocked,
+        SecureAccess = contentModel.SecureAccess,
+        AllPortsBlocked = contentModel.AllPortsBlocked,
+        NonSecureAccess = contentModel.NonSecureAccess
+    };
+    
+    urlFilterService.SetUrlRedis(keyHash, updateModel, TimeSpan.FromDays(1)); //bug
+
+    checkUrl.UrlContent = contentModel.Url;
+    checkUrl.DomainBlocked = contentModel.DomainBlocked;
+    checkUrl.SecureAccess = contentModel.SecureAccess;
+    checkUrl.AllPortsBlocked = contentModel.AllPortsBlocked;
+    checkUrl.NonSecureAccess = contentModel.NonSecureAccess;
+    checkUrl.UpdatedDate = DateTime.Now;
+    checkUrl.UpdatedBy = "App";
+    
+    context.UrlFilter.Update(checkUrl);
+    context.SaveChanges();
+    
     return http.Response.StatusCode = (int)HttpStatusCode.OK; //next feature
 });
 
 
-app.MapGet("/ListAllBlockedUrls", (IUrlFilterService urlFilterService, HttpContext http) =>
+app.MapGet("/ListAllBlockedUrls", (UrlFilterContext context, IUrlFilterService urlFilterService, HttpContext http) =>
 {
-    return http.Response.StatusCode = (int)HttpStatusCode.OK; //next feature
+    return context.UrlFilter.Where(x => x.IsActive.Equals(true)).ToList();
 });
 
 
