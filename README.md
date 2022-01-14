@@ -11,8 +11,8 @@
 - Querying the entered url on Redis
 - Adding the entered url to Redis
 - Deleting the entered url on Redis
-- Updating the entered url on Redis (Next Features 🖖)
-- Listing all urls on Redis (Next Features 🖖)
+- Updating the entered url on Redis
+- Listing all urls on Redis
 
 ##  Methods
 
